@@ -6,35 +6,37 @@ import coverageOptions from './mcr.config';
 const test = testBase.extend<{
     autoTestFixture: string
 }>({
-    autoTestFixture: [async ({ page }, use) => {
+    autoTestFixture: [async ({ context }, use) => {
 
         const isChromium = test.info().project.name === 'chromium';
 
         // console.log('autoTestFixture setup...');
         // coverage API is chromium only
         if (isChromium) {
-            await Promise.all([
-                page.coverage.startJSCoverage({
-                    resetOnNavigation: false
-                }),
-                page.coverage.startCSSCoverage({
-                    resetOnNavigation: false
-                })
-            ]);
+            context.on('page', async (page) => {
+                await Promise.all([
+                    page.coverage.startJSCoverage({
+                        resetOnNavigation: false
+                    }),
+                    page.coverage.startCSSCoverage({
+                        resetOnNavigation: false
+                    })
+                ]);
+            });
         }
 
         await use('autoTestFixture');
 
         // console.log('autoTestFixture teardown...');
         if (isChromium) {
-            const [jsCoverage, cssCoverage] = await Promise.all([
-                page.coverage.stopJSCoverage(),
-                page.coverage.stopCSSCoverage()
-            ]);
-            const coverageList = [... jsCoverage, ... cssCoverage];
+            const coverageList = await Promise.all(context.pages().map(async (page) => {
+              const jsCoverage = await page.coverage.stopJSCoverage();
+              const cssCoverage = await page.coverage.stopCSSCoverage();
+              return [...jsCoverage, ...cssCoverage];
+            }));
             // console.log(coverageList.map((item) => item.url));
             const mcr = MCR(coverageOptions);
-            await mcr.add(coverageList);
+            await mcr.add(coverageList.flat());
         }
 
     }, {
